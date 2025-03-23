@@ -9,10 +9,18 @@
 <body>
     <h2>Загрузить файл в Google Drive</h2>
 
-    <button onclick="authenticate()">Авторизоваться</button><br><br>
-    <input type="file" id="fileInput"><br><br>
-    <input type="text" id="name" placeholder="Название файла"><br><br>
-    <button onclick="uploadFile()">Загрузить</button>
+    <!-- Кнопка авторизации -->
+    <button id="authButton" onclick="authenticate()">Авторизоваться</button><br><br>
+
+    <!-- Место для аватарки пользователя -->
+    <div id="avatarContainer" style="display: none;">
+        <img id="userAvatar" src="" alt="Аватар пользователя" style="width: 50px; height: 50px; border-radius: 50%;">
+        <span id="userName"></span>
+    </div><br>
+
+    <input type="file" id="fileInput" disabled><br><br>
+    <input type="text" id="name" placeholder="Название файла" disabled><br><br>
+    <button onclick="uploadFile()" disabled>Загрузить</button>
 
     <script>
         const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com"; 
@@ -25,9 +33,11 @@
             const accessToken = localStorage.getItem("access_token");
             if (accessToken) {
                 alert("Вы уже авторизованы!");
+                document.getElementById("authButton").style.display = "none";  // Скрыть кнопку авторизации
                 document.getElementById("fileInput").disabled = false;  // Разблокируем кнопку загрузки файлов
                 document.getElementById("name").disabled = false;  // Разблокируем поле для ввода имени файла
                 document.querySelector("button[onclick='uploadFile()']").disabled = false;  // Разблокируем кнопку загрузки
+                fetchUserData(); // Получаем данные пользователя
             } else {
                 alert("Пожалуйста, авторизуйтесь!");
             }
@@ -44,6 +54,28 @@
                     checkAuthorization(); // Проверяем авторизацию
                 },
             }).requestAccessToken();
+        }
+
+        // Функция получения данных о пользователе (аватарка и имя)
+        function fetchUserData() {
+            const accessToken = localStorage.getItem("access_token");
+            fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                headers: {
+                    "Authorization": "Bearer " + accessToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Отображаем аватарку и имя пользователя
+                const avatarContainer = document.getElementById("avatarContainer");
+                const userAvatar = document.getElementById("userAvatar");
+                const userName = document.getElementById("userName");
+
+                avatarContainer.style.display = "block"; // Показываем контейнер с аватаром
+                userAvatar.src = data.picture; // Устанавливаем аватарку
+                userName.textContent = `Привет, ${data.given_name}`; // Имя пользователя
+            })
+            .catch(error => alert("Ошибка получения данных: " + error.message));
         }
 
         // Функция загрузки файла
