@@ -5,163 +5,241 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Загрузка товаров в Google Drive</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h2 {
+            color: #333;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #3267d6;
+        }
+        input, #fileInput {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #avatarContainer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        #userAvatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
 </head>
 <body>
     <h2>Загрузить товар в Google Drive</h2>
 
-    <!-- Кнопка авторизации -->
-    <button id="authButton" onclick="authenticate()">Авторизоваться</button><br><br>
+    <button id="authButton" onclick="authenticate()">Авторизоваться</button>
 
-    <!-- Место для аватарки пользователя -->
     <div id="avatarContainer" style="display: none;">
-        <img id="userAvatar" src="" alt="Аватар пользователя" style="width: 50px; height: 50px; border-radius: 50%;">
+        <img id="userAvatar" src="" alt="Аватар пользователя">
         <span id="userName"></span>
-    </div><br>
+    </div>
 
-    <!-- Поля для ввода данных о товаре -->
-    <input type="file" id="fileInput" disabled><br><br>
-    <input type="text" id="productName" placeholder="Название товара" disabled><br><br>
-    <input type="number" id="productPrice" placeholder="Цена товара" disabled><br><br>
-    <button onclick="uploadProduct()" disabled>Загрузить товар</button>
+    <input type="file" id="fileInput" accept="image/*" disabled>
+    <input type="text" id="productName" placeholder="Название товара" disabled>
+    <input type="number" id="productPrice" placeholder="Цена товара" min="0" disabled>
+    <button id="uploadButton" onclick="uploadProduct()" disabled>Загрузить товар</button>
+    <div id="errorMessage" class="error"></div>
 
     <script>
-        const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com"; 
-        const API_KEY = "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"; 
+        const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com";
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
-        const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78"; // Замени на ID папки в Google Drive
+        const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78";
+        let productId = 0;
 
-        let productId = 0; // ID товара для назначения в файл
+        const authButton = document.getElementById("authButton");
+        const fileInput = document.getElementById("fileInput");
+        const productNameInput = document.getElementById("productName");
+        const productPriceInput = document.getElementById("productPrice");
+        const uploadButton = document.getElementById("uploadButton");
+        const errorMessage = document.getElementById("errorMessage");
 
-        // Проверка авторизации при загрузке страницы
-        function checkAuthorization() {
+        // Проверка авторизации при загрузке
+        window.onload = () => checkAuthorization();
+
+        async function checkAuthorization() {
             const accessToken = localStorage.getItem("access_token");
             if (accessToken) {
-                alert("Вы уже авторизованы!");
-                document.getElementById("authButton").style.display = "none";  // Скрыть кнопку авторизации
-                document.getElementById("fileInput").disabled = false;  // Разблокируем кнопку загрузки файлов
-                document.getElementById("productName").disabled = false;  // Разблокируем поле для ввода имени товара
-                document.getElementById("productPrice").disabled = false;  // Разблокируем поле для ввода цены
-                document.querySelector("button[onclick='uploadProduct()']").disabled = false;  // Разблокируем кнопку загрузки товара
-                fetchUserData(); // Получаем данные пользователя
-            } else {
-                alert("Пожалуйста, авторизуйтесь!");
+                authButton.style.display = "none";
+                enableForm();
+                await fetchUserData(accessToken);
             }
         }
 
-        // Функция аутентификации
         function authenticate() {
             google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
-                callback: (tokenResponse) => {
-                    localStorage.setItem("access_token", tokenResponse.access_token); // Сохраняем токен
-                    alert("Авторизация успешна!");
-                    checkAuthorization(); // Проверяем авторизацию
+                callback: async (tokenResponse) => {
+                    localStorage.setItem("access_token", tokenResponse.access_token);
+                    authButton.style.display = "none";
+                    enableForm();
+                    await fetchUserData(tokenResponse.access_token);
                 },
             }).requestAccessToken();
         }
 
-        // Функция получения данных о пользователе (аватарка и имя)
-        function fetchUserData() {
-            const accessToken = localStorage.getItem("access_token");
-            fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-                headers: {
-                    "Authorization": "Bearer " + accessToken
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Отображаем аватарку и имя пользователя
-                const avatarContainer = document.getElementById("avatarContainer");
-                const userAvatar = document.getElementById("userAvatar");
-                const userName = document.getElementById("userName");
-
-                avatarContainer.style.display = "block"; // Показываем контейнер с аватаром
-                userAvatar.src = data.picture; // Устанавливаем аватарку
-                userName.textContent = `Привет, ${data.given_name}`; // Имя пользователя
-            })
-            .catch(error => alert("Ошибка получения данных: " + error.message));
+        async function fetchUserData(accessToken) {
+            try {
+                const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                    headers: { "Authorization": `Bearer ${accessToken}` }
+                });
+                const data = await response.json();
+                document.getElementById("avatarContainer").style.display = "flex";
+                document.getElementById("userAvatar").src = data.picture;
+                document.getElementById("userName").textContent = `Привет, ${data.given_name}`;
+            } catch (error) {
+                showError("Ошибка получения данных пользователя: " + error.message);
+            }
         }
 
-        // Функция создания текстового файла с данными товара
+        function enableForm() {
+            fileInput.disabled = false;
+            productNameInput.disabled = false;
+            productPriceInput.disabled = false;
+            uploadButton.disabled = false;
+        }
+
         function createProductFile(productName, productPrice) {
             const productData = `ID: ${productId}\nНазвание: ${productName}\nЦена: ${productPrice}\n\n`;
-            const blob = new Blob([productData], { type: "text/plain" });
-            return blob;
+            return new Blob([productData], { type: "text/plain" });
         }
 
-        // Функция загрузки товара
-        function uploadProduct() {
-            const fileInput = document.getElementById("fileInput");
+        async function checkFileExists(accessToken, fileName) {
+            const response = await fetch(
+                `https://www.googleapis.com/drive/v3/files?q='${FOLDER_ID}' in parents name='${fileName}'`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const data = await response.json();
+            return data.files && data.files.length > 0 ? data.files[0] : null;
+        }
+
+        async function uploadFile(accessToken, file, metadata, replaceFileId = null) {
+            const formData = new FormData();
+            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+            formData.append("file", file);
+
+            const url = replaceFileId
+                ? `https://www.googleapis.com/upload/drive/v3/files/${replaceFileId}?uploadType=multipart`
+                : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+
+            const method = replaceFileId ? "PATCH" : "POST";
+
+            const response = await fetch(url, {
+                method,
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: formData,
+            });
+            return await response.json();
+        }
+
+        async function uploadProduct() {
             const file = fileInput.files[0];
-            const productName = document.getElementById("productName").value;
-            const productPrice = document.getElementById("productPrice").value;
+            const productName = productNameInput.value.trim();
+            const productPrice = productPriceInput.value.trim();
 
             if (!file || !productName || !productPrice) {
-                alert("Пожалуйста, заполните все поля!");
+                showError("Пожалуйста, заполните все поля!");
                 return;
             }
 
             const accessToken = localStorage.getItem("access_token");
             if (!accessToken) {
-                alert("Сначала авторизуйтесь!");
+                showError("Сначала авторизуйтесь!");
                 return;
             }
 
-            // Создаем файл с данными товара
-            const productFile = createProductFile(productName, productPrice);
+            try {
+                // Проверка и загрузка изображения
+                const imageName = `${productName}.jpg`;
+                let existingImage = await checkFileExists(accessToken, imageName);
+                let imageId;
 
-            // Загружаем фото товара
-            const metadata = {
-                name: productName + ".jpg",
-                mimeType: file.type,
-                parents: [FOLDER_ID]
-            };
+                if (existingImage) {
+                    const action = confirm(`Файл "${imageName}" уже существует. Заменить? (Нажмите "Отмена" для переименования)`);
+                    if (!action) {
+                        const newName = prompt("Введите новое имя для файла:", `${productName}_${Date.now()}.jpg`);
+                        if (!newName) return;
+                        existingImage = null; // Сбрасываем, так как переименовали
+                        imageName = newName;
+                    }
+                }
 
-            const formData = new FormData();
-            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-            formData.append("file", file);
+                const imageMetadata = { name: imageName, mimeType: file.type, parents: [FOLDER_ID] };
+                const imageData = await uploadFile(accessToken, file, imageMetadata, existingImage?.id);
+                imageId = imageData.id;
 
-            fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-                method: "POST",
-                headers: { Authorization: "Bearer " + accessToken },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert("Фото загружено! ID: " + data.id);
-                uploadTextFile(productFile, accessToken); // Загружаем текстовый файл с данными товара
-            })
-            .catch(error => alert("Ошибка загрузки фото: " + error.message));
+                // Проверка и загрузка текстового файла
+                const textFileName = `product_${productId}.txt`;
+                let existingTextFile = await checkFileExists(accessToken, textFileName);
+                if (existingTextFile) {
+                    const action = confirm(`Файл "${textFileName}" уже существует. Заменить? (Нажмите "Отмена" для переименования)`);
+                    if (!action) {
+                        const newName = prompt("Введите новое имя для файла:", `product_${productId}_${Date.now()}.txt`);
+                        if (!newName) return;
+                        existingTextFile = null;
+                        textFileName = newName;
+                    }
+                }
+
+                const textFile = createProductFile(productName, productPrice);
+                const textMetadata = { name: textFileName, mimeType: "text/plain", parents: [FOLDER_ID] };
+                const textData = await uploadFile(accessToken, textFile, textMetadata, existingTextFile?.id);
+
+                alert(`Товар загружен!\nФото ID: ${imageId}\nТекстовый файл ID: ${textData.id}`);
+                productId++;
+                resetForm();
+            } catch (error) {
+                showError("Ошибка загрузки: " + error.message);
+            }
         }
 
-        // Функция загрузки текстового файла с данными товара
-        function uploadTextFile(file, accessToken) {
-            const metadata = {
-                name: `product_${productId}.txt`, // Имя файла с данными товара
-                mimeType: "text/plain",
-                parents: [FOLDER_ID]
-            };
-
-            const formData = new FormData();
-            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-            formData.append("file", file);
-
-            fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-                method: "POST",
-                headers: { Authorization: "Bearer " + accessToken },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert("Текстовый файл с данными товара загружен! ID: " + data.id);
-                productId++; // Увеличиваем ID для следующего товара
-            })
-            .catch(error => alert("Ошибка загрузки текстового файла: " + error.message));
+        function showError(message) {
+            errorMessage.textContent = message;
+            setTimeout(() => errorMessage.textContent = "", 5000);
         }
 
-        // Проверка авторизации при загрузке страницы
-        window.onload = checkAuthorization;
+        function resetForm() {
+            fileInput.value = "";
+            productNameInput.value = "";
+            productPriceInput.value = "";
+        }
     </script>
 </body>
 </html>
