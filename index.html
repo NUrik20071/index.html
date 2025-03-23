@@ -24,6 +24,7 @@
             google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
+                redirect_uri: "https://nurik20071.github.io/index.html", // Указано как в Google Cloud Console
                 callback: (tokenResponse) => {
                     localStorage.setItem("access_token", tokenResponse.access_token);
                     alert("Авторизация успешна!");
