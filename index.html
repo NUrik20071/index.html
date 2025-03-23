@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Загрузка файлов в Google Drive</title>
+    <title>Загрузка товаров в Google Drive</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-    <h2>Загрузить файл в Google Drive</h2>
+    <h2>Загрузить товар в Google Drive</h2>
 
     <!-- Кнопка авторизации -->
     <button id="authButton" onclick="authenticate()">Авторизоваться</button><br><br>
@@ -18,15 +18,19 @@
         <span id="userName"></span>
     </div><br>
 
+    <!-- Поля для ввода данных о товаре -->
     <input type="file" id="fileInput" disabled><br><br>
-    <input type="text" id="name" placeholder="Название файла" disabled><br><br>
-    <button onclick="uploadFile()" disabled>Загрузить</button>
+    <input type="text" id="productName" placeholder="Название товара" disabled><br><br>
+    <input type="number" id="productPrice" placeholder="Цена товара" disabled><br><br>
+    <button onclick="uploadProduct()" disabled>Загрузить товар</button>
 
     <script>
         const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com"; 
         const API_KEY = "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"; 
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
         const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78"; // Замени на ID папки в Google Drive
+
+        let productId = 0; // ID товара для назначения в файл
 
         // Проверка авторизации при загрузке страницы
         function checkAuthorization() {
@@ -35,8 +39,9 @@
                 alert("Вы уже авторизованы!");
                 document.getElementById("authButton").style.display = "none";  // Скрыть кнопку авторизации
                 document.getElementById("fileInput").disabled = false;  // Разблокируем кнопку загрузки файлов
-                document.getElementById("name").disabled = false;  // Разблокируем поле для ввода имени файла
-                document.querySelector("button[onclick='uploadFile()']").disabled = false;  // Разблокируем кнопку загрузки
+                document.getElementById("productName").disabled = false;  // Разблокируем поле для ввода имени товара
+                document.getElementById("productPrice").disabled = false;  // Разблокируем поле для ввода цены
+                document.querySelector("button[onclick='uploadProduct()']").disabled = false;  // Разблокируем кнопку загрузки товара
                 fetchUserData(); // Получаем данные пользователя
             } else {
                 alert("Пожалуйста, авторизуйтесь!");
@@ -78,13 +83,22 @@
             .catch(error => alert("Ошибка получения данных: " + error.message));
         }
 
-        // Функция загрузки файла
-        function uploadFile() {
+        // Функция создания текстового файла с данными товара
+        function createProductFile(productName, productPrice) {
+            const productData = `ID: ${productId}\nНазвание: ${productName}\nЦена: ${productPrice}\n\n`;
+            const blob = new Blob([productData], { type: "text/plain" });
+            return blob;
+        }
+
+        // Функция загрузки товара
+        function uploadProduct() {
             const fileInput = document.getElementById("fileInput");
             const file = fileInput.files[0];
+            const productName = document.getElementById("productName").value;
+            const productPrice = document.getElementById("productPrice").value;
 
-            if (!file) {
-                alert("Выберите файл!");
+            if (!file || !productName || !productPrice) {
+                alert("Пожалуйста, заполните все поля!");
                 return;
             }
 
@@ -94,8 +108,12 @@
                 return;
             }
 
+            // Создаем файл с данными товара
+            const productFile = createProductFile(productName, productPrice);
+
+            // Загружаем фото товара
             const metadata = {
-                name: document.getElementById("name").value + ".jpg",
+                name: productName + ".jpg",
                 mimeType: file.type,
                 parents: [FOLDER_ID]
             };
@@ -110,8 +128,36 @@
                 body: formData
             })
             .then(response => response.json())
-            .then(data => alert("Файл загружен! ID: " + data.id))
-            .catch(error => alert("Ошибка загрузки: " + error.message));
+            .then(data => {
+                alert("Фото загружено! ID: " + data.id);
+                uploadTextFile(productFile, accessToken); // Загружаем текстовый файл с данными товара
+            })
+            .catch(error => alert("Ошибка загрузки фото: " + error.message));
+        }
+
+        // Функция загрузки текстового файла с данными товара
+        function uploadTextFile(file, accessToken) {
+            const metadata = {
+                name: `product_${productId}.txt`, // Имя файла с данными товара
+                mimeType: "text/plain",
+                parents: [FOLDER_ID]
+            };
+
+            const formData = new FormData();
+            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+            formData.append("file", file);
+
+            fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                method: "POST",
+                headers: { Authorization: "Bearer " + accessToken },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert("Текстовый файл с данными товара загружен! ID: " + data.id);
+                productId++; // Увеличиваем ID для следующего товара
+            })
+            .catch(error => alert("Ошибка загрузки текстового файла: " + error.message));
         }
 
         // Проверка авторизации при загрузке страницы
