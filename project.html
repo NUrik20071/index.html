@@ -3,24 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админка: Загрузка в Google Drive</title>
+    <title>Загрузка файлов в Google Drive</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-    <h2>Загрузить товар в Google Drive</h2>
+    <h2>Загрузить файл в Google Drive</h2>
 
-    <button onclick="authenticate()">Авторизоваться</button>
-    <br><br>
+    <button onclick="authenticate()">Авторизоваться</button><br><br>
     <input type="file" id="fileInput"><br><br>
-    <input type="text" id="name" placeholder="Название"><br><br>
-    <input type="number" id="price" placeholder="Цена"><br><br>
+    <input type="text" id="name" placeholder="Название файла"><br><br>
     <button onclick="uploadFile()">Загрузить</button>
 
     <script>
-        const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com";
-        const API_KEY = "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";
-        const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+        const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com"; 
+        const API_KEY = "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"; 
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
+        const FOLDER_ID = "YOUR_FOLDER_ID"; // Замени на ID папки в Google Drive
 
         function authenticate() {
             google.accounts.oauth2.initTokenClient({
@@ -42,17 +40,17 @@
                 return;
             }
 
-            const metadata = {
-                name: document.getElementById("name").value + "_" + document.getElementById("price").value + ".jpg",
-                mimeType: file.type,
-                parents: ["YOUR_FOLDER_ID"] // Укажи ID папки в Google Drive
-            };
-
             const accessToken = localStorage.getItem("access_token");
             if (!accessToken) {
                 alert("Сначала авторизуйтесь!");
                 return;
             }
+
+            const metadata = {
+                name: document.getElementById("name").value + ".jpg",
+                mimeType: file.type,
+                parents: [FOLDER_ID]
+            };
 
             const formData = new FormData();
             formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
