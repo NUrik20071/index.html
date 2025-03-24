@@ -50,18 +50,18 @@
     </div>
 
     <script>
-        const CLIENT_ID = "ТВОЙ_CLIENT_ID.apps.googleusercontent.com";
-        const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile"; // Добавлен scope для профиля
-        const FOLDER_ID = "ТВОЙ_ID_ПАПКИ"; // ID папки в Google Drive
+        const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com";
+        const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
+        const FOLDER_ID = "ТВОЙ_ID_ПАПКИ"; // Укажи ID папки в Google Drive
         let accessToken = localStorage.getItem("access_token");
-        let imageIds = []; // Массив для хранения ID загруженных изображений
+        let imageIds = [];
 
-        // Авторизация с выбором аккаунта
+        // Авторизация
         function authenticate() {
             const tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
-                prompt: 'select_account', // Заставляет показывать выбор аккаунта
+                prompt: 'select_account',
                 callback: (tokenResponse) => {
                     accessToken = tokenResponse.access_token;
                     localStorage.setItem("access_token", accessToken);
@@ -108,7 +108,7 @@
             const files = Array.from(fileInputs).map(input => input.files[0]).filter(file => file);
             if (files.length === 0) return alert("Выберите хотя бы одно фото!");
 
-            imageIds = []; // Очищаем массив перед загрузкой
+            imageIds = [];
             for (let file of files) {
                 let metadata = {
                     name: file.name,
