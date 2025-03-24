@@ -4,63 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Админка</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; }
         .container { max-width: 400px; margin: auto; }
         input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+        .hidden { display: none; }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; }
     </style>
 </head>
 <body>
 
     <h1>Админка</h1>
 
-    <div class="container">
-        <input type="text" id="name" placeholder="Название товара">
-        <input type="number" id="price" placeholder="Цена">
-        <input type="text" id="image" placeholder="ID изображения Google Drive">
-        <button onclick="addProduct()">Добавить товар</button>
-        <input type="text" id="deleteId" placeholder="ID товара для удаления">
-        <button onclick="deleteProduct()">Удалить товар</button>
+    <div id="auth-section">
+        <button onclick="authenticate()">Авторизоваться</button>
+    </div>
+
+    <div id="admin-section" class="hidden">
+        <img id="avatar" class="avatar">
+        <h2>Добавить товар</h2>
+        <div class="container">
+            <input type="text" id="name" placeholder="Название товара">
+            <input type="number" id="price" placeholder="Цена">
+            <input type="text" id="image" placeholder="ID изображения Google Drive">
+            <button onclick="addProduct()">Добавить товар</button>
+        </div>
+
+        <h2>Удалить товар</h2>
+        <div class="container">
+            <input type="text" id="deleteId" placeholder="ID товара для удаления">
+            <button onclick="deleteProduct()">Удалить товар</button>
+        </div>
     </div>
 
     <script>
-        let accessToken = ""; // Здесь будет храниться токен
+        const CLIENT_ID = "ТВОЙ_CLIENT_ID.apps.googleusercontent.com";
+        const SCOPES = "https://www.googleapis.com/auth/drive.file";
+        let accessToken = localStorage.getItem("access_token");
 
         function authenticate() {
-            return new Promise((resolve, reject) => {
-                const clientId = "ТВОЙ_CLIENT_ID.apps.googleusercontent.com";
-                const scope = "https://www.googleapis.com/auth/drive.file";
-                const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${window.location.origin}&response_type=token&scope=${scope}`;
-
-                let popup = window.open(authUrl, "authPopup", "width=500,height=600");
-                let checkPopup = setInterval(() => {
-                    try {
-                        if (!popup || popup.closed) {
-                            clearInterval(checkPopup);
-                            reject("Окно закрыто");
-                        }
-                        if (popup.location.hash) {
-                            let params = new URLSearchParams(popup.location.hash.substring(1));
-                            accessToken = params.get("access_token");
-                            popup.close();
-                            clearInterval(checkPopup);
-                            resolve();
-                        }
-                    } catch (e) {}
-                }, 1000);
-            });
+            google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    accessToken = tokenResponse.access_token;
+                    localStorage.setItem("access_token", accessToken);
+                    fetchUserInfo();
+                },
+            }).requestAccessToken();
         }
 
+        function fetchUserInfo() {
+            fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            })
+            .then(res => res.json())
+            .then(user => {
+                document.getElementById("auth-section").classList.add("hidden");
+                document.getElementById("admin-section").classList.remove("hidden");
+                document.getElementById("avatar").src = user.picture;
+            })
+            .catch(() => localStorage.removeItem("access_token"));
+        }
+
+        if (accessToken) fetchUserInfo();
+
         async function addProduct() {
-            if (!accessToken) await authenticate();
+            if (!accessToken) return alert("Авторизуйтесь!");
             let name = document.getElementById("name").value.trim();
             let price = document.getElementById("price").value.trim();
             let image = document.getElementById("image").value.trim();
 
-            if (!name || !price || !image) {
-                alert("Заполните все поля!");
-                return;
-            }
+            if (!name || !price || !image) return alert("Заполните все поля!");
 
             let productId = Date.now().toString();
             let productData = JSON.stringify({ id: productId, name, price, image });
@@ -80,7 +96,7 @@
 
             let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
                 method: "POST",
-                headers: { Authorization: "Bearer " + accessToken },
+                headers: { Authorization: `Bearer ${accessToken}` },
                 body: formData
             });
 
@@ -89,18 +105,11 @@
         }
 
         async function deleteProduct() {
-            if (!accessToken) await authenticate();
+            if (!accessToken) return alert("Авторизуйтесь!");
             let deleteId = document.getElementById("deleteId").value.trim();
-            if (!deleteId) {
-                alert("Введите ID товара!");
-                return;
-            }
+            if (!deleteId) return alert("Введите ID товара!");
 
-            await deleteProductFile(deleteId);
-        }
-
-        async function deleteProductFile(productId) {
-            let response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${productId}.txt'&spaces=drive`, {
+            let response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${deleteId}.txt'&spaces=drive`, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
 
