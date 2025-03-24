@@ -176,8 +176,7 @@
             <button onclick="closeEditModal()">Закрыть</button>
         </div>
     </div>
-
-    <script>
+        <script>
         const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com";
         const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
         const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78";
@@ -466,4 +465,43 @@
                 if (files.length > 0) {
                     // Удаляем старые фото
                     for (let imageId of imageIds) {
-                        
+                        await fetch(`https://www.googleapis.com/drive/v3/files/${imageId}`, {
+                            method: "DELETE",
+                            headers: { Authorization: `Bearer ${accessToken}` }
+                        });
+                    }
+                    // Загружаем новые фото
+                    imageIds = [];
+                    for (let file of files) {
+                        let metadata = { name: file.name, mimeType: file.type, parents: [FOLDER_ID] };
+                        let formData = new FormData();
+                        formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+                        formData.append("file", file);
+
+                        let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                            method: "POST",
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                            body: formData
+                        });
+                        let data = await response.json();
+                        imageIds.push(data.id);
+                    }
+                }
+
+                // Обновляем данные товара
+                let productData = JSON.stringify({ id: productId, name, price, image: imageIds });
+                await fetch(`https://www.googleapis.com/drive/v3/files/${product.fileId}`, {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                await createProductFile(productId, productData);
+            }
+
+            alert("Изменения сохранены!");
+            closeEditModal();
+            fetchProducts();
+            updateSelectedProductsPreview();
+        }
+    </script>
+</body>
+</html>
