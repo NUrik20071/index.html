@@ -51,22 +51,24 @@
 
     <script>
         const CLIENT_ID = "ТВОЙ_CLIENT_ID.apps.googleusercontent.com";
-        const SCOPES = "https://www.googleapis.com/auth/drive.file";
+        const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile"; // Добавлен scope для профиля
         const FOLDER_ID = "ТВОЙ_ID_ПАПКИ"; // ID папки в Google Drive
         let accessToken = localStorage.getItem("access_token");
         let imageIds = []; // Массив для хранения ID загруженных изображений
 
-        // Авторизация
+        // Авторизация с выбором аккаунта
         function authenticate() {
-            google.accounts.oauth2.initTokenClient({
+            const tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
+                prompt: 'select_account', // Заставляет показывать выбор аккаунта
                 callback: (tokenResponse) => {
                     accessToken = tokenResponse.access_token;
                     localStorage.setItem("access_token", accessToken);
                     fetchUserInfo();
                 },
-            }).requestAccessToken();
+            });
+            tokenClient.requestAccessToken();
         }
 
         // Получение данных пользователя
@@ -80,7 +82,10 @@
                 document.getElementById("admin-section").classList.remove("hidden");
                 document.getElementById("avatar").src = user.picture;
             })
-            .catch(() => localStorage.removeItem("access_token"));
+            .catch(() => {
+                localStorage.removeItem("access_token");
+                alert("Ошибка авторизации. Попробуйте снова.");
+            });
         }
 
         if (accessToken) fetchUserInfo();
