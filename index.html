@@ -6,15 +6,89 @@
     <title>Админка</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        .container { max-width: 600px; margin: auto; }
-        input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; }
+        input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; box-sizing: border-box; }
         .hidden { display: none; }
         .avatar { width: 50px; height: 50px; border-radius: 50%; }
-        #photo-container { margin: 10px 0; }
-        #product-list { text-align: left; margin-top: 20px; }
-        .product-item { border: 1px solid #ddd; padding: 10px; margin: 5px 0; display: flex; align-items: center; }
-        .product-item img { max-width: 100px; margin-right: 10px; }
+        .product-entry { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        h2 { font-size: 24px; margin: 20px 0; }
+
+        /* Стиль списка товаров */
+        #product-list { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
+            gap: 20px; 
+            text-align: left; 
+            margin-top: 20px; 
+        }
+        .product-item { 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            background: #fff; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+            position: relative; 
+        }
+        .product-item img { 
+            width: 100%; 
+            height: 150px; 
+            object-fit: contain; 
+            border-radius: 4px; 
+        }
+        .product-item .discount { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            background: #ff6200; 
+            color: #fff; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+        }
+        .product-item .price { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #000; 
+        }
+        .product-item .old-price { 
+            font-size: 14px; 
+            color: #888; 
+            text-decoration: line-through; 
+            margin-left: 5px; 
+        }
+        .product-item .name { 
+            font-size: 14px; 
+            color: #333; 
+            margin: 5px 0; 
+            height: 40px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+        .product-item .cart-btn { 
+            background: #007bff; 
+            color: #fff; 
+            border: none; 
+            padding: 8px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .product-item .cart-btn::before { 
+            content: "🛒"; 
+            margin-right: 5px; 
+        }
+        .product-item .cart-btn:hover { 
+            background: #0056b3; 
+        }
+        .product-item input[type="checkbox"] { 
+            position: absolute; 
+            top: 10px; 
+            right: 10px; 
+        }
     </style>
 </head>
 <body>
@@ -29,21 +103,19 @@
     <!-- Админ-панель -->
     <div id="admin-section" class="hidden">
         <img id="avatar" class="avatar">
-        <h2>Добавить товар</h2>
-        <div class="container">
-            <input type="text" id="name" placeholder="Название товара">
-            <input type="number" id="price" placeholder="Цена">
-
-            <!-- Загрузка фото -->
-            <div id="photo-container">
-                <input type="file" class="fileInput" accept="image/*">
+        <h2>Добавить товары</h2>
+        <div class="container" id="products-container">
+            <div class="product-entry">
+                <input type="text" class="name" placeholder="Название товара">
+                <input type="number" class="price" placeholder="Цена">
+                <div class="photo-container">
+                    <input type="file" class="fileInput" accept="image/*" multiple>
+                </div>
+                <button onclick="addPhotoField(this)">Добавить ещё фото</button>
             </div>
-            <button onclick="addPhotoField()">Добавить фото товара</button>
-            <button onclick="uploadImages()">Загрузить все фото</button>
-            <input type="text" id="image" placeholder="ID изображений (через запятую)" readonly>
-
-            <button onclick="addProduct()">Добавить товар</button>
         </div>
+        <button onclick="addProductEntry()">Добавить ещё товар</button>
+        <button onclick="addProducts()">Добавить товары</button>
 
         <!-- Массовая загрузка -->
         <h2>Массовая загрузка товаров</h2>
@@ -66,9 +138,8 @@
     <script>
         const CLIENT_ID = "ВАШ_РЕАЛЬНЫЙ_CLIENT_ID.apps.googleusercontent.com"; // Замените на ваш Client ID
         const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
-        const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78"; // Ваш Folder ID
+        const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78";
         let accessToken = localStorage.getItem("access_token");
-        let imageIds = [];
 
         // Авторизация
         function authenticate() {
@@ -85,7 +156,7 @@
                     accessToken = tokenResponse.access_token;
                     localStorage.setItem("access_token", accessToken);
                     fetchUserInfo();
-                    fetchProducts(); // Загружаем список товаров после авторизации
+                    fetchProducts();
                 },
             });
             tokenClient.requestAccessToken();
@@ -113,55 +184,72 @@
             fetchProducts();
         }
 
-        // Добавление поля для фото
-        function addPhotoField() {
-            const container = document.getElementById("photo-container");
+        // Добавление нового поля для фото
+        function addPhotoField(button) {
+            const container = button.previousElementSibling;
             const newInput = document.createElement("input");
             newInput.type = "file";
             newInput.className = "fileInput";
             newInput.accept = "image/*";
+            newInput.multiple = true;
             container.appendChild(newInput);
         }
 
-        // Загрузка фото
-        async function uploadImages() {
-            if (!accessToken) return alert("Авторизуйтесь!");
-            const fileInputs = document.getElementsByClassName("fileInput");
-            const files = Array.from(fileInputs).map(input => input.files[0]).filter(file => file);
-            if (files.length === 0) return alert("Выберите хотя бы одно фото!");
-
-            imageIds = [];
-            for (let file of files) {
-                let metadata = { name: file.name, mimeType: file.type, parents: [FOLDER_ID] };
-                let formData = new FormData();
-                formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-                formData.append("file", file);
-
-                let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${accessToken}` },
-                    body: formData
-                });
-                let data = await response.json();
-                imageIds.push(data.id);
-            }
-            document.getElementById("image").value = imageIds.join(",");
-            alert("Все фото загружены! ID: " + imageIds.join(", "));
+        // Добавление нового блока для товара
+        function addProductEntry() {
+            const container = document.getElementById("products-container");
+            const newEntry = document.createElement("div");
+            newEntry.className = "product-entry";
+            newEntry.innerHTML = `
+                <input type="text" class="name" placeholder="Название товара">
+                <input type="number" class="price" placeholder="Цена">
+                <div class="photo-container">
+                    <input type="file" class="fileInput" accept="image/*" multiple>
+                </div>
+                <button onclick="addPhotoField(this)">Добавить ещё фото</button>
+            `;
+            container.appendChild(newEntry);
         }
 
-        // Добавление товара
-        async function addProduct() {
+        // Добавление всех товаров
+        async function addProducts() {
             if (!accessToken) return alert("Авторизуйтесь!");
-            let name = document.getElementById("name").value.trim();
-            let price = document.getElementById("price").value.trim();
-            let image = document.getElementById("image").value.trim();
 
-            if (!name || !price || !image) return alert("Заполните все поля!");
+            const entries = document.getElementsByClassName("product-entry");
+            for (let entry of entries) {
+                let name = entry.querySelector(".name").value.trim();
+                let price = entry.querySelector(".price").value.trim();
+                let fileInputs = entry.querySelectorAll(".fileInput");
+                let files = Array.from(fileInputs).flatMap(input => Array.from(input.files)).filter(file => file);
 
-            let productId = Date.now().toString();
-            let productData = JSON.stringify({ id: productId, name, price, image: image.split(",") });
-            await createProductFile(productId, productData);
-            fetchProducts(); // Обновляем список после добавления
+                if (!name || !price) {
+                    alert("Заполните все поля для каждого товара!");
+                    return;
+                }
+
+                let imageIds = [];
+                for (let file of files) {
+                    let metadata = { name: file.name, mimeType: file.type, parents: [FOLDER_ID] };
+                    let formData = new FormData();
+                    formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+                    formData.append("file", file);
+
+                    let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${accessToken}` },
+                        body: formData
+                    });
+                    let data = await response.json();
+                    imageIds.push(data.id);
+                }
+
+                let productId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                let productData = JSON.stringify({ id: productId, name, price, image: imageIds });
+                await createProductFile(productId, productData);
+            }
+            alert("Товары добавлены!");
+            fetchProducts();
+            clearForm();
         }
 
         // Создание файла товара
@@ -177,7 +265,21 @@
                 body: formData
             });
             let data = await response.json();
-            alert("Товар добавлен! ID файла: " + data.id);
+        }
+
+        // Очистка формы
+        function clearForm() {
+            const container = document.getElementById("products-container");
+            container.innerHTML = `
+                <div class="product-entry">
+                    <input type="text" class="name" placeholder="Название товара">
+                    <input type="number" class="price" placeholder="Цена">
+                    <div class="photo-container">
+                        <input type="file" class="fileInput" accept="image/*" multiple>
+                    </div>
+                    <button onclick="addPhotoField(this)">Добавить ещё фото</button>
+                </div>
+            `;
         }
 
         // Удаление товара
@@ -197,7 +299,7 @@
                     headers: { Authorization: `Bearer ${accessToken}` }
                 });
                 alert("Товар удалён!");
-                fetchProducts(); // Обновляем список после удаления
+                fetchProducts();
             } else {
                 alert("Файл не найден!");
             }
@@ -221,19 +323,23 @@
                     let productData = await fileResponse.json();
                     let div = document.createElement("div");
                     div.className = "product-item";
+                    // Для примера добавим случайную скидку
+                    let discount = Math.floor(Math.random() * 30) + 10;
+                    let oldPrice = Math.round(productData.price * (1 + discount / 100));
                     div.innerHTML = `
                         <input type="checkbox" name="product" value="${productData.id}">
-                        <div>
-                            <strong>${productData.name}</strong> - ${productData.price} руб.<br>
-                            ${productData.image.map(id => `<img src="https://drive.google.com/thumbnail?id=${id}" alt="Фото">`).join("")}
-                        </div>
+                        ${productData.image.length > 0 ? `<img src="https://drive.google.com/thumbnail?id=${productData.image[0]}" alt="Фото">` : '<img src="https://via.placeholder.com/150" alt="Нет фото">'}
+                        <div class="discount">РАССРОЧКА 0-0-6</div>
+                        <div class="price">${productData.price} ₽ <span class="old-price">${oldPrice} ₽</span></div>
+                        <div class="name">${productData.name}</div>
+                        <button class="cart-btn">В корзину</button>
                     `;
                     productList.appendChild(div);
                 }
             }
         }
 
-        // Массовая загрузка товаров из JSON
+        // Массовая загрузка из JSON
         async function bulkUploadProducts() {
             if (!accessToken) return alert("Авторизуйтесь!");
             const fileInput = document.getElementById("bulkUpload");
@@ -244,7 +350,7 @@
             reader.onload = async (e) => {
                 const products = JSON.parse(e.target.result);
                 for (let product of products) {
-                    let productId = Date.now().toString() + Math.random().toString(36).substr(2, 5); // Уникальный ID
+                    let productId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
                     let productData = JSON.stringify({
                         id: productId,
                         name: product.name,
@@ -254,7 +360,7 @@
                     await createProductFile(productId, productData);
                 }
                 alert("Товары загружены!");
-                fetchProducts(); // Обновляем список
+                fetchProducts();
             };
             reader.readAsText(file);
         }
