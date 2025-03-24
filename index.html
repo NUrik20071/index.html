@@ -17,17 +17,24 @@
 
     <h1>Админка</h1>
 
+    <!-- Авторизация -->
     <div id="auth-section">
         <button onclick="authenticate()">Авторизоваться</button>
     </div>
 
+    <!-- Админ-панель -->
     <div id="admin-section" class="hidden">
         <img id="avatar" class="avatar">
         <h2>Добавить товар</h2>
         <div class="container">
             <input type="text" id="name" placeholder="Название товара">
             <input type="number" id="price" placeholder="Цена">
-            <input type="text" id="image" placeholder="ID изображения Google Drive">
+
+            <!-- Загрузка фото -->
+            <input type="file" id="fileInput">
+            <button onclick="uploadImage()">Загрузить фото</button>
+            <input type="text" id="image" placeholder="ID изображения" readonly>
+
             <button onclick="addProduct()">Добавить товар</button>
         </div>
 
@@ -41,8 +48,10 @@
     <script>
         const CLIENT_ID = "ТВОЙ_CLIENT_ID.apps.googleusercontent.com";
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
+        const FOLDER_ID = "ТВОЙ_ID_ПАПКИ"; // ID папки в Google Drive
         let accessToken = localStorage.getItem("access_token");
 
+        // Авторизация
         function authenticate() {
             google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
@@ -55,6 +64,7 @@
             }).requestAccessToken();
         }
 
+        // Получение данных пользователя
         function fetchUserInfo() {
             fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
                 headers: { Authorization: `Bearer ${accessToken}` }
@@ -70,6 +80,36 @@
 
         if (accessToken) fetchUserInfo();
 
+        // Загрузка фото в Google Drive
+        async function uploadImage() {
+            if (!accessToken) return alert("Авторизуйтесь!");
+
+            let fileInput = document.getElementById("fileInput");
+            let file = fileInput.files[0];
+            if (!file) return alert("Выберите фото!");
+
+            let metadata = {
+                name: file.name,
+                mimeType: file.type,
+                parents: [FOLDER_ID]
+            };
+
+            let formData = new FormData();
+            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+            formData.append("file", file);
+
+            let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: formData
+            });
+
+            let data = await response.json();
+            document.getElementById("image").value = data.id;
+            alert("Фото загружено! ID: " + data.id);
+        }
+
+        // Добавление товара
         async function addProduct() {
             if (!accessToken) return alert("Авторизуйтесь!");
             let name = document.getElementById("name").value.trim();
@@ -84,10 +124,12 @@
             await createProductFile(productId, productData);
         }
 
+        // Создание JSON файла в Google Drive
         async function createProductFile(productId, productData) {
             let metadata = {
                 name: `${productId}.txt`,
-                mimeType: "text/plain"
+                mimeType: "text/plain",
+                parents: [FOLDER_ID]
             };
 
             let formData = new FormData();
@@ -104,6 +146,7 @@
             alert("Товар добавлен! ID файла: " + data.id);
         }
 
+        // Удаление товара
         async function deleteProduct() {
             if (!accessToken) return alert("Авторизуйтесь!");
             let deleteId = document.getElementById("deleteId").value.trim();
