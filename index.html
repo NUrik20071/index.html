@@ -3,242 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Загрузка товаров в Google Drive</title>
+    <title>Админ-панель</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        h2 {
-            color: #333;
-            text-align: center;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        button:hover:not(:disabled) {
-            background-color: #3267d6;
-        }
-        input, #fileInput {
-            display: block;
-            width: 100%;
-            padding: 8px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        #avatarContainer {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 20px 0;
-        }
-        #userAvatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-        .error {
-            color: red;
-            font-size: 14px;
-            margin-top: 5px;
-        }
-    </style>
 </head>
 <body>
-    <h2>Загрузить товар в Google Drive</h2>
+    <h2>Управление товарами</h2>
 
-    <button id="authButton" onclick="authenticate()">Авторизоваться</button>
+    <button onclick="authenticate()">Авторизоваться</button><br><br>
 
-    <div id="avatarContainer" style="display: none;">
-        <img id="userAvatar" src="" alt="Аватар пользователя">
-        <span id="userName"></span>
-    </div>
+    <h3>Загрузить изображение</h3>
+    <input type="file" id="imageInput" accept="image/*"><br><br>
+    <button onclick="uploadImage()">Загрузить изображение</button><br><br>
 
-    <input type="file" id="fileInput" accept="image/*" disabled>
-    <input type="text" id="productName" placeholder="Название товара" disabled>
-    <input type="number" id="productPrice" placeholder="Цена товара" min="0" disabled>
-    <button id="uploadButton" onclick="uploadProduct()" disabled>Загрузить товар</button>
-    <div id="errorMessage" class="error"></div>
+    <h3>Загрузить список товаров</h3>
+    <input type="file" id="fileInput" accept=".txt"><br><br>
+    <button onclick="uploadFile()">Загрузить новый .txt</button>
+
+    <h3>Удалить товар</h3>
+    <input type="text" id="deleteFileId" placeholder="Введите ID файла"><br><br>
+    <button onclick="deleteFile()">Удалить товар</button>
+
+    <h3>Список загруженных товаров:</h3>
+    <pre id="fileList"></pre>
 
     <script>
         const CLIENT_ID = "531826501379-e2hpum3jrta7u2q2s255ubvn23ie559j.apps.googleusercontent.com";
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
-        const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78";
-        let productId = 0;
+        const FOLDER_ID = "ID_ПАПКИ_С_ТОВАРАМИ"; 
 
-        const authButton = document.getElementById("authButton");
-        const fileInput = document.getElementById("fileInput");
-        const productNameInput = document.getElementById("productName");
-        const productPriceInput = document.getElementById("productPrice");
-        const uploadButton = document.getElementById("uploadButton");
-        const errorMessage = document.getElementById("errorMessage");
-
-        // Проверка авторизации при загрузке
-        window.onload = () => checkAuthorization();
-
-        async function checkAuthorization() {
-            const accessToken = localStorage.getItem("access_token");
-            if (accessToken) {
-                authButton.style.display = "none";
-                enableForm();
-                await fetchUserData(accessToken);
-            }
-        }
+        let accessToken = "";
 
         function authenticate() {
             google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
-                callback: async (tokenResponse) => {
-                    localStorage.setItem("access_token", tokenResponse.access_token);
-                    authButton.style.display = "none";
-                    enableForm();
-                    await fetchUserData(tokenResponse.access_token);
+                callback: (tokenResponse) => {
+                    accessToken = tokenResponse.access_token;
+                    alert("Авторизация успешна!");
+                    fetchProducts();
                 },
             }).requestAccessToken();
         }
 
-        async function fetchUserData(accessToken) {
-            try {
-                const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-                    headers: { "Authorization": `Bearer ${accessToken}` }
-                });
-                const data = await response.json();
-                document.getElementById("avatarContainer").style.display = "flex";
-                document.getElementById("userAvatar").src = data.picture;
-                document.getElementById("userName").textContent = `Привет, ${data.given_name}`;
-            } catch (error) {
-                showError("Ошибка получения данных пользователя: " + error.message);
-            }
-        }
+        async function uploadImage() {
+            const fileInput = document.getElementById("imageInput");
+            const file = fileInput.files[0];
 
-        function enableForm() {
-            fileInput.disabled = false;
-            productNameInput.disabled = false;
-            productPriceInput.disabled = false;
-            uploadButton.disabled = false;
-        }
+            if (!file || !accessToken) return alert("Выберите изображение и авторизуйтесь!");
 
-        function createProductFile(productName, productPrice) {
-            const productData = `ID: ${productId}\nНазвание: ${productName}\nЦена: ${productPrice}\n\n`;
-            return new Blob([productData], { type: "text/plain" });
-        }
-
-        async function checkFileExists(accessToken, fileName) {
-            const response = await fetch(
-                `https://www.googleapis.com/drive/v3/files?q='${FOLDER_ID}' in parents name='${fileName}'`,
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const data = await response.json();
-            return data.files && data.files.length > 0 ? data.files[0] : null;
-        }
-
-        async function uploadFile(accessToken, file, metadata, replaceFileId = null) {
+            const metadata = { name: file.name, mimeType: file.type, parents: [FOLDER_ID] };
             const formData = new FormData();
             formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
             formData.append("file", file);
 
-            const url = replaceFileId
-                ? `https://www.googleapis.com/upload/drive/v3/files/${replaceFileId}?uploadType=multipart`
-                : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-
-            const method = replaceFileId ? "PATCH" : "POST";
-
-            const response = await fetch(url, {
-                method,
-                headers: { Authorization: `Bearer ${accessToken}` },
-                body: formData,
+            const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                method: "POST", headers: { Authorization: "Bearer " + accessToken }, body: formData
             });
-            return await response.json();
+
+            const data = await response.json();
+            alert(data.id ? "Изображение загружено! ID: " + data.id : "Ошибка загрузки!");
         }
 
-        async function uploadProduct() {
+        async function uploadFile() {
+            const fileInput = document.getElementById("fileInput");
             const file = fileInput.files[0];
-            const productName = productNameInput.value.trim();
-            const productPrice = productPriceInput.value.trim();
 
-            if (!file || !productName || !productPrice) {
-                showError("Пожалуйста, заполните все поля!");
-                return;
-            }
+            if (!file || !accessToken) return alert("Выберите .txt файл и авторизуйтесь!");
 
-            const accessToken = localStorage.getItem("access_token");
-            if (!accessToken) {
-                showError("Сначала авторизуйтесь!");
-                return;
-            }
+            const metadata = { name: "products.txt", mimeType: "text/plain", parents: [FOLDER_ID] };
+            const formData = new FormData();
+            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+            formData.append("file", file);
 
-            try {
-                // Проверка и загрузка изображения
-                const imageName = `${productName}.jpg`;
-                let existingImage = await checkFileExists(accessToken, imageName);
-                let imageId;
+            const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                method: "POST", headers: { Authorization: "Bearer " + accessToken }, body: formData
+            });
 
-                if (existingImage) {
-                    const action = confirm(`Файл "${imageName}" уже существует. Заменить? (Нажмите "Отмена" для переименования)`);
-                    if (!action) {
-                        const newName = prompt("Введите новое имя для файла:", `${productName}_${Date.now()}.jpg`);
-                        if (!newName) return;
-                        existingImage = null; // Сбрасываем, так как переименовали
-                        imageName = newName;
-                    }
-                }
-
-                const imageMetadata = { name: imageName, mimeType: file.type, parents: [FOLDER_ID] };
-                const imageData = await uploadFile(accessToken, file, imageMetadata, existingImage?.id);
-                imageId = imageData.id;
-
-                // Проверка и загрузка текстового файла
-                const textFileName = `product_${productId}.txt`;
-                let existingTextFile = await checkFileExists(accessToken, textFileName);
-                if (existingTextFile) {
-                    const action = confirm(`Файл "${textFileName}" уже существует. Заменить? (Нажмите "Отмена" для переименования)`);
-                    if (!action) {
-                        const newName = prompt("Введите новое имя для файла:", `product_${productId}_${Date.now()}.txt`);
-                        if (!newName) return;
-                        existingTextFile = null;
-                        textFileName = newName;
-                    }
-                }
-
-                const textFile = createProductFile(productName, productPrice);
-                const textMetadata = { name: textFileName, mimeType: "text/plain", parents: [FOLDER_ID] };
-                const textData = await uploadFile(accessToken, textFile, textMetadata, existingTextFile?.id);
-
-                alert(`Товар загружен!\nФото ID: ${imageId}\nТекстовый файл ID: ${textData.id}`);
-                productId++;
-                resetForm();
-            } catch (error) {
-                showError("Ошибка загрузки: " + error.message);
-            }
+            const data = await response.json();
+            alert(data.id ? "Файл обновлен! ID: " + data.id : "Ошибка загрузки!");
+            fetchProducts();
         }
 
-        function showError(message) {
-            errorMessage.textContent = message;
-            setTimeout(() => errorMessage.textContent = "", 5000);
+        async function deleteFile() {
+            const fileId = document.getElementById("deleteFileId").value;
+            if (!fileId || !accessToken) return alert("Введите ID файла и авторизуйтесь!");
+
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+                method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` }
+            });
+
+            alert(response.ok ? "Файл удален!" : "Ошибка удаления!");
+            fetchProducts();
         }
 
-        function resetForm() {
-            fileInput.value = "";
-            productNameInput.value = "";
-            productPriceInput.value = "";
+        async function fetchProducts() {
+            if (!accessToken) return;
+
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files?q='${FOLDER_ID}'+in+parents`, {
+                method: "GET", headers: { Authorization: `Bearer ${accessToken}` }
+            });
+
+            const data = await response.json();
+            document.getElementById("fileList").innerText = data.files ? 
+                data.files.map(file => `${file.name} - ID: ${file.id}`).join("\n") : "Ошибка загрузки списка!";
         }
     </script>
 </body>
