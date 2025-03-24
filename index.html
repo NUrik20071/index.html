@@ -11,6 +11,7 @@
         input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
         .hidden { display: none; }
         .avatar { width: 50px; height: 50px; border-radius: 50%; }
+        #photo-container { margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -31,9 +32,12 @@
             <input type="number" id="price" placeholder="Цена">
 
             <!-- Загрузка фото -->
-            <input type="file" id="fileInput">
-            <button onclick="uploadImage()">Загрузить фото</button>
-            <input type="text" id="image" placeholder="ID изображения" readonly>
+            <div id="photo-container">
+                <input type="file" class="fileInput" accept="image/*">
+            </div>
+            <button onclick="addPhotoField()">Добавить фото товара</button>
+            <button onclick="uploadImages()">Загрузить все фото</button>
+            <input type="text" id="image" placeholder="ID изображений (через запятую)" readonly>
 
             <button onclick="addProduct()">Добавить товар</button>
         </div>
@@ -50,6 +54,7 @@
         const SCOPES = "https://www.googleapis.com/auth/drive.file";
         const FOLDER_ID = "ТВОЙ_ID_ПАПКИ"; // ID папки в Google Drive
         let accessToken = localStorage.getItem("access_token");
+        let imageIds = []; // Массив для хранения ID загруженных изображений
 
         // Авторизация
         function authenticate() {
@@ -80,33 +85,48 @@
 
         if (accessToken) fetchUserInfo();
 
-        // Загрузка фото в Google Drive
-        async function uploadImage() {
+        // Добавление нового поля для фото
+        function addPhotoField() {
+            const container = document.getElementById("photo-container");
+            const newInput = document.createElement("input");
+            newInput.type = "file";
+            newInput.className = "fileInput";
+            newInput.accept = "image/*";
+            container.appendChild(newInput);
+        }
+
+        // Загрузка всех фото в Google Drive
+        async function uploadImages() {
             if (!accessToken) return alert("Авторизуйтесь!");
 
-            let fileInput = document.getElementById("fileInput");
-            let file = fileInput.files[0];
-            if (!file) return alert("Выберите фото!");
+            const fileInputs = document.getElementsByClassName("fileInput");
+            const files = Array.from(fileInputs).map(input => input.files[0]).filter(file => file);
+            if (files.length === 0) return alert("Выберите хотя бы одно фото!");
 
-            let metadata = {
-                name: file.name,
-                mimeType: file.type,
-                parents: [FOLDER_ID]
-            };
+            imageIds = []; // Очищаем массив перед загрузкой
+            for (let file of files) {
+                let metadata = {
+                    name: file.name,
+                    mimeType: file.type,
+                    parents: [FOLDER_ID]
+                };
 
-            let formData = new FormData();
-            formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-            formData.append("file", file);
+                let formData = new FormData();
+                formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+                formData.append("file", file);
 
-            let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${accessToken}` },
-                body: formData
-            });
+                let response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    body: formData
+                });
 
-            let data = await response.json();
-            document.getElementById("image").value = data.id;
-            alert("Фото загружено! ID: " + data.id);
+                let data = await response.json();
+                imageIds.push(data.id);
+            }
+
+            document.getElementById("image").value = imageIds.join(",");
+            alert("Все фото загружены! ID: " + imageIds.join(", "));
         }
 
         // Добавление товара
@@ -119,7 +139,7 @@
             if (!name || !price || !image) return alert("Заполните все поля!");
 
             let productId = Date.now().toString();
-            let productData = JSON.stringify({ id: productId, name, price, image });
+            let productData = JSON.stringify({ id: productId, name, price, image: image.split(",") });
 
             await createProductFile(productId, productData);
         }
