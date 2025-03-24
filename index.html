@@ -28,9 +28,15 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
             position: relative; 
         }
-        .product-item img { 
-            width: 100%; 
-            height: 150px; 
+        .product-item .photo-carousel { 
+            display: flex; 
+            overflow-x: auto; 
+            gap: 10px; 
+            margin-bottom: 10px; 
+        }
+        .product-item .photo-carousel img { 
+            width: 100px; 
+            height: 100px; 
             object-fit: contain; 
             border-radius: 4px; 
         }
@@ -39,7 +45,7 @@
             top: 10px; 
             right: 10px; 
         }
-        #delete-selected-btn { 
+        #delete-selected-btn, #edit-selected-btn { 
             background: #dc3545; 
             color: #fff; 
             border: none; 
@@ -48,6 +54,10 @@
             cursor: pointer; 
             font-size: 16px; 
             margin-top: 20px; 
+            margin-right: 10px; 
+        }
+        #edit-selected-btn { 
+            background: #007bff; 
         }
         .add-product-btn { 
             width: 40px; 
@@ -84,6 +94,42 @@
             object-fit: cover; 
             border-radius: 4px; 
         }
+        #selected-products-preview { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin-top: 20px; 
+            text-align: left; 
+        }
+        .selected-product { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            margin-bottom: 10px; 
+        }
+        .selected-product img { 
+            width: 50px; 
+            height: 50px; 
+            object-fit: cover; 
+            border-radius: 4px; 
+        }
+        #edit-modal { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            display: none; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        #edit-modal-content { 
+            background: #fff; 
+            padding: 20px; 
+            border-radius: 8px; 
+            width: 90%; 
+            max-width: 500px; 
+        }
     </style>
 </head>
 <body>
@@ -113,7 +159,22 @@
         <!-- Список товаров -->
         <h2>Список товаров</h2>
         <div id="product-list" class="container"></div>
+        <div id="selected-products-preview" class="container">
+            <h3>Выбранные товары</h3>
+            <div id="selected-products-list"></div>
+        </div>
+        <button id="edit-selected-btn" onclick="openEditModal()">Изменить выбранные товары</button>
         <button id="delete-selected-btn" onclick="deleteSelectedProducts()">Удалить выбранные товары</button>
+    </div>
+
+    <!-- Модальное окно для редактирования -->
+    <div id="edit-modal">
+        <div id="edit-modal-content">
+            <h2>Редактировать товары</h2>
+            <div id="edit-products-container"></div>
+            <button onclick="saveEditedProducts()">Сохранить изменения</button>
+            <button onclick="closeEditModal()">Закрыть</button>
+        </div>
     </div>
 
     <script>
@@ -121,6 +182,7 @@
         const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
         const FOLDER_ID = "17tKKmWurcoRZi96oI7ujB25uMNhUOy78";
         let accessToken = localStorage.getItem("access_token");
+        let allProducts = [];
 
         // Авторизация
         function authenticate() {
@@ -262,30 +324,6 @@
             `;
         }
 
-        // Удаление выбранных товаров
-        async function deleteSelectedProducts() {
-            if (!accessToken) return alert("Авторизуйтесь!");
-            const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]:checked');
-            const idsToDelete = Array.from(checkboxes).map(checkbox => checkbox.value);
-            if (idsToDelete.length === 0) return alert("Выберите товары для удаления!");
-
-            for (let deleteId of idsToDelete) {
-                let response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${deleteId}.txt'&spaces=drive`, {
-                    headers: { Authorization: `Bearer ${accessToken}` }
-                });
-                let data = await response.json();
-                if (data.files.length > 0) {
-                    let fileId = data.files[0].id;
-                    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-                        method: "DELETE",
-                        headers: { Authorization: `Bearer ${accessToken}` }
-                    });
-                }
-            }
-            alert("Выбранные товары удалены!");
-            fetchProducts();
-        }
-
         // Загрузка списка товаров
         async function fetchProducts() {
             if (!accessToken) return;
@@ -295,6 +333,7 @@
             let data = await response.json();
             const productList = document.getElementById("product-list");
             productList.innerHTML = "";
+            allProducts = [];
 
             for (let file of data.files) {
                 if (file.name.endsWith(".txt")) {
@@ -302,11 +341,16 @@
                         headers: { Authorization: `Bearer ${accessToken}` }
                     });
                     let productData = await fileResponse.json();
+                    productData.fileId = file.id; // Сохраняем fileId для удаления и редактирования
+                    allProducts.push(productData);
+
                     let div = document.createElement("div");
                     div.className = "product-item";
                     div.innerHTML = `
-                        <input type="checkbox" name="product" value="${productData.id}">
-                        ${productData.image.length > 0 ? `<img src="https://drive.google.com/thumbnail?id=${productData.image[0]}" alt="Фото">` : '<img src="https://via.placeholder.com/150" alt="Нет фото">'}
+                        <input type="checkbox" name="product" value="${productData.id}" onchange="updateSelectedProductsPreview()">
+                        <div class="photo-carousel">
+                            ${productData.image.length > 0 ? productData.image.map(id => `<img src="https://drive.google.com/thumbnail?id=${id}" alt="Фото">`).join("") : '<img src="https://via.placeholder.com/100" alt="Нет фото">'}
+                        </div>
                         <div class="name">${productData.name}</div>
                         <div class="price">${productData.price} ₽</div>
                     `;
@@ -314,6 +358,112 @@
                 }
             }
         }
-    </script>
-</body>
-</html>
+
+        // Обновление превью выбранных товаров
+        function updateSelectedProductsPreview() {
+            const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]:checked');
+            const selectedIds = Array.from(checkboxes).map(checkbox => checkbox.value);
+            const selectedProducts = allProducts.filter(product => selectedIds.includes(product.id));
+            const previewList = document.getElementById("selected-products-list");
+            previewList.innerHTML = "";
+
+            selectedProducts.forEach(product => {
+                let div = document.createElement("div");
+                div.className = "selected-product";
+                div.innerHTML = `
+                    ${product.image.length > 0 ? `<img src="https://drive.google.com/thumbnail?id=${product.image[0]}" alt="Фото">` : '<img src="https://via.placeholder.com/50" alt="Нет фото">'}
+                    <div>
+                        <strong>${product.name}</strong><br>
+                        ${product.price} ₽
+                    </div>
+                `;
+                previewList.appendChild(div);
+            });
+        }
+
+        // Удаление выбранных товаров
+        async function deleteSelectedProducts() {
+            if (!accessToken) return alert("Авторизуйтесь!");
+            const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]:checked');
+            const idsToDelete = Array.from(checkboxes).map(checkbox => checkbox.value);
+            if (idsToDelete.length === 0) return alert("Выберите товары для удаления!");
+
+            for (let deleteId of idsToDelete) {
+                let product = allProducts.find(p => p.id === deleteId);
+                if (product) {
+                    // Удаляем файл товара
+                    await fetch(`https://www.googleapis.com/drive/v3/files/${product.fileId}`, {
+                        method: "DELETE",
+                        headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    // Удаляем связанные фото
+                    for (let imageId of product.image) {
+                        await fetch(`https://www.googleapis.com/drive/v3/files/${imageId}`, {
+                            method: "DELETE",
+                            headers: { Authorization: `Bearer ${accessToken}` }
+                        });
+                    }
+                }
+            }
+            alert("Выбранные товары удалены!");
+            fetchProducts();
+            updateSelectedProductsPreview();
+        }
+
+        // Открытие модального окна для редактирования
+        function openEditModal() {
+            const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]:checked');
+            const selectedIds = Array.from(checkboxes).map(checkbox => checkbox.value);
+            if (selectedIds.length === 0) return alert("Выберите товары для редактирования!");
+
+            const selectedProducts = allProducts.filter(product => selectedIds.includes(product.id));
+            const editContainer = document.getElementById("edit-products-container");
+            editContainer.innerHTML = "";
+
+            selectedProducts.forEach(product => {
+                let div = document.createElement("div");
+                div.className = "product-entry";
+                div.dataset.id = product.id;
+                div.innerHTML = `
+                    <h3>${product.name}</h3>
+                    <input type="text" class="name" value="${product.name}" placeholder="Название товара">
+                    <input type="number" class="price" value="${product.price}" placeholder="Цена">
+                    <input type="file" class="photo-input" accept="image/*" multiple onchange="showPreview(this)">
+                    <button class="choose-photo-btn" onclick="this.previousElementSibling.click()">Выбрать новые фото</button>
+                    <div class="photo-preview"></div>
+                `;
+                editContainer.appendChild(div);
+            });
+
+            document.getElementById("edit-modal").style.display = "flex";
+        }
+
+        // Закрытие модального окна
+        function closeEditModal() {
+            document.getElementById("edit-modal").style.display = "none";
+        }
+
+        // Сохранение изменений
+        async function saveEditedProducts() {
+            if (!accessToken) return alert("Авторизуйтесь!");
+
+            const entries = document.getElementsByClassName("product-entry");
+            for (let entry of entries) {
+                let productId = entry.dataset.id;
+                let name = entry.querySelector(".name").value.trim();
+                let price = entry.querySelector(".price").value.trim();
+                let photoInput = entry.querySelector(".photo-input");
+                let files = Array.from(photoInput.files).filter(file => file);
+
+                if (!name || !price) {
+                    alert("Заполните все поля для каждого товара!");
+                    return;
+                }
+
+                let product = allProducts.find(p => p.id === productId);
+                let imageIds = product.image; // Сохраняем старые фото, если новые не выбраны
+
+                if (files.length > 0) {
+                    // Удаляем старые фото
+                    for (let imageId of imageIds) {
+                        await fetch(`https://ww
